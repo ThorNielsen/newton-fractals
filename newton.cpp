@@ -229,6 +229,39 @@ Colour newtonAA(T pWidth, T pHeight, int samples,
     return Colour(r / samples, g / samples, b / samples);
 }
 
+struct FractalInfo
+{
+    Complex<double> chaos;
+    double width;
+    double height;
+    int exponent;
+    int samples;
+    int maxIterations;
+    int pixelWidth;
+    int pixelHeight;
+};
+
+void calculateNewtonChunk(int xBegin, int xEnd, int yBegin, int yEnd,
+                          FractalInfo info, Image& img,
+                          const std::vector<double>& aaPos)
+{
+    double fx = info.width / static_cast<double>(info.pixelWidth);
+    double px = info.width * 0.5;
+    double fy = info.height / static_cast<double>(info.pixelHeight);
+    double py = info.height * 0.5;
+    for (int x = xBegin; x < xEnd; ++x)
+    {
+        for (int y = yBegin; y < yEnd; ++y)
+        {
+            double cx = fx * x - px;
+            double cy = fy * y - py;
+            img.setPixel(x, y, newtonAA(fx, fy, info.samples, aaPos, info.chaos,
+                                        cx, cy, info.exponent,
+                                        info.maxIterations, 1e-16));
+        }
+    }
+}
+
 int main()
 {
     std::mt19937 gen;
@@ -238,50 +271,33 @@ int main()
     {
         positions.push_back(dist(gen));
     }
-    float height;
+    FractalInfo info;
     std::cout << "Complex plane height: ";
-    std::cin >> height;
+    std::cin >> info.height;
     std::cout << "Image dimensions: ";
-    int dimX = 1600, dimY = 900;
-    std::cin >> dimX >> dimY;
-
-    int exp;
+    std::cin >> info.pixelWidth >> info.pixelHeight;
     std::cout << "Exponent: ";
-    std::cin >> exp;
-    int samples;
+    std::cin >> info.exponent;
     std::cout << "Anti-aliasing samples: ";
-    std::cin >> samples;
-    int maxIt;
+    std::cin >> info.samples;
     std::cout << "Max iterations: ";
-    std::cin >> maxIt;
-    Complex<double> chaos;
+    std::cin >> info.maxIterations;
     std::cout << "Chaos: ";
-    std::cin >> chaos.real >> chaos.imag;
-    float aspect = dimX * 1.f / dimY;
-    float fx = aspect * (height / dimX);
-    float px = aspect * height * .5f;
-    float fy = height / dimY;
-    float py = height * .5f;
+    std::cin >> info.chaos.real >> info.chaos.imag;
+    double aspect = static_cast<double>(info.pixelWidth)
+                    / static_cast<double>(info.pixelHeight);
+    info.width = aspect * info.height;
 
-    Image img("Newton fractal " + std::to_string(exp)
-              + " (" + std::to_string(aspect * height)
-              + "x" + std::to_string(height) + ", "
-              + std::to_string(samples) + "AA, chaos:"
-              + std::to_string(chaos.real)
-              + (chaos.imag >= 0. ? "+" : "")
-              + std::to_string(chaos.imag)
-              + ")",
-              dimX, dimY);
-    for (int x = 0; x < dimX; ++x)
-    {
-        for (int y = 0; y < dimY; ++y)
-        {
-            double cx = fx * x - px;
-            double cy = fy * y - py;
-            img.setPixel(x, y, newtonAA((double)fx, (double)fy, samples,
-                                        positions, chaos,
-                                        cx, cy, exp, maxIt, 1e-16));
-        }
-    }
+    Image img("Newton fractal " + std::to_string(info.exponent)
+              + " (" + std::to_string(info.width)
+              + "x" + std::to_string(info.height) + ", "
+              + std::to_string(info.samples) + "AA, chaos:"
+              + std::to_string(info.chaos.real)
+              + (info.chaos.imag >= 0. ? "+" : "")
+              + std::to_string(info.chaos.imag)
+              + "i)",
+              info.pixelWidth, info.pixelHeight);
+    calculateNewtonChunk(0, info.pixelWidth, 0, info.pixelHeight,
+                         info, img, positions);
     writeImage(img);
 }
