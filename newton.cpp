@@ -193,7 +193,8 @@ Colour hsv(float h, float s, float v)
 }
 
 template <typename T>
-Colour newton(T x, T y, int exp, int maxIt = 256, T maxDist = 1e-12)
+Colour newton(Complex<T> chaos, T x, T y, int exp, int maxIt = 256,
+              T maxDist = 1e-12)
 {
     Complex<T> z{x, y};
     Complex<T> one{T(1), T(0)};
@@ -203,24 +204,24 @@ Colour newton(T x, T y, int exp, int maxIt = 256, T maxDist = 1e-12)
     while ((p-one).norm() > maxDist && ++it < maxIt)
     {
         auto denom = T(exp) * pm;
-        z = z - (p-one) / denom;
+        z = z - chaos * (p-one) / denom;
         p = pow(z, exp);
         pm = pow(z, exp-1);
     }
-    return hsv(z.arg() + 3.14159265f, 1.f, 1.f - it / (float)maxIt);// 1. - maxIt / 255.);
+    return hsv(z.arg() + 3.14159265f, 1.f, 1.f);// - it / (float)maxIt);
 }
 
 
 template <typename T>
 Colour newtonAA(T pWidth, T pHeight, int samples,
-                const std::vector<T>& positions,
+                const std::vector<T>& positions, Complex<T> chaos,
                 T x, T y, int exp, int maxIt = 256, T maxDist = 1e-12)
 {
     int r = 0, g = 0, b = 0;
     for (int i = 0; i < samples; ++i)
     {
-        auto c = newton(x + pWidth*positions[2*i], y+pHeight*positions[2*i+1],
-                        exp, maxIt, maxDist);
+        auto c = newton(chaos, x + pWidth*positions[2*i],
+                        y+pHeight*positions[2*i+1], exp, maxIt, maxDist);
         r += c.r;
         g += c.g;
         b += c.b;
@@ -250,6 +251,12 @@ int main()
     int samples;
     std::cout << "Anti-aliasing samples: ";
     std::cin >> samples;
+    int maxIt;
+    std::cout << "Max iterations: ";
+    std::cin >> maxIt;
+    Complex<double> chaos;
+    std::cout << "Chaos: ";
+    std::cin >> chaos.real >> chaos.imag;
     float aspect = dimX * 1.f / dimY;
     float fx = aspect * (height / dimX);
     float px = aspect * height * .5f;
@@ -268,7 +275,8 @@ int main()
             double cx = fx * x - px;
             double cy = fy * y - py;
             img.setPixel(x, y, newtonAA((double)fx, (double)fy, samples,
-                                        positions, cx, cy, exp, 256, 1e-16));
+                                        positions, chaos,
+                                        cx, cy, exp, maxIt, 1e-16));
         }
     }
     writeImage(img);
