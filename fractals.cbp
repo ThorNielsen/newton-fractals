@@ -29,9 +29,13 @@
 			</Target>
 		</Build>
 		<Compiler>
-			<Add option="-Wall" />
-			<Add option="-Wextra" />
+			<Add option="-std=c++11" />
+			<Add option="-Wl,--no-as-needed" />
+			<Add option="-pthread" />
 		</Compiler>
+		<Linker>
+			<Add library="pthread" />
+		</Linker>
 		<Unit filename="newton.cpp" />
 		<Extensions>
 			<envvars />

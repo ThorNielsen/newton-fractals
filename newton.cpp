@@ -5,6 +5,7 @@
 #include <string>
 #include <vector>
 #include <random>
+#include <thread>
 
 struct Colour
 {
@@ -297,7 +298,27 @@ int main()
               + std::to_string(info.chaos.imag)
               + "i)",
               info.pixelWidth, info.pixelHeight);
-    calculateNewtonChunk(0, info.pixelWidth, 0, info.pixelHeight,
+
+    int yBegin = 0;
+    auto maxThreads = std::thread::hardware_concurrency();
+    int chunkHeight = info.pixelHeight / maxThreads;
+
+    std::vector<std::thread> threads;
+    for (unsigned i = 0; i < maxThreads; ++i)
+    {
+        threads.emplace_back(calculateNewtonChunk, 0, info.pixelWidth,
+                             yBegin, yBegin + chunkHeight, info, std::ref(img),
+                             positions);
+        yBegin += chunkHeight;
+    }
+
+    calculateNewtonChunk(0, info.pixelWidth, yBegin, info.pixelHeight,
                          info, img, positions);
+
+    for (auto& thread : threads)
+    {
+        thread.join();
+    }
+
     writeImage(img);
 }
