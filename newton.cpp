@@ -208,7 +208,7 @@ Colour newton(Complex<T> chaos, T x, T y, int exp, int maxIt = 256,
         p = pow(z, exp);
         pm = pow(z, exp-1);
     }
-    return hsv(z.arg() + 3.14159265f, 1.f, 1.f);// - it / (float)maxIt);
+    return hsv(z.arg() + 3.14159265f, 1.f, 1.f - 0.25f * it / (float)maxIt);
 }
 
 
@@ -263,10 +263,14 @@ int main()
     float fy = height / dimY;
     float py = height * .5f;
 
-    Image img("Newton" + std::to_string(exp)
+    Image img("Newton fractal " + std::to_string(exp)
               + " (" + std::to_string(aspect * height)
               + "x" + std::to_string(height) + ", "
-              + std::to_string(samples) + "AA)",
+              + std::to_string(samples) + "AA, chaos:"
+              + std::to_string(chaos.real)
+              + (chaos.imag >= 0. ? "+" : "")
+              + std::to_string(chaos.imag)
+              + ")",
               dimX, dimY);
     for (int x = 0; x < dimX; ++x)
     {
