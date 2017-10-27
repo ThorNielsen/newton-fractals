@@ -209,7 +209,7 @@ Colour newton(Complex<T> chaos, T x, T y, int exp, int maxIt = 256,
         p = pow(z, exp);
         pm = pow(z, exp-1);
     }
-    return hsv(z.arg() + 3.14159265f, 1.f, 1.f - 0.25f * it / (float)maxIt);
+    return hsv(z.arg() + 3.14159265f, 1.f, 1.f - 0.05f * it / (float)maxIt);
 }
 
 
@@ -265,13 +265,6 @@ void calculateNewtonChunk(int xBegin, int xEnd, int yBegin, int yEnd,
 
 int main()
 {
-    std::mt19937 gen;
-    std::uniform_real_distribution<double> dist(-.5, .5);
-    std::vector<double> positions;
-    for (int i = 0; i < 512; ++i)
-    {
-        positions.push_back(dist(gen));
-    }
     FractalInfo info;
     std::cout << "Complex plane height: ";
     std::cin >> info.height;
@@ -281,6 +274,13 @@ int main()
     std::cin >> info.exponent;
     std::cout << "Anti-aliasing samples: ";
     std::cin >> info.samples;
+    std::mt19937 gen;
+    std::uniform_real_distribution<double> dist(-.5, .5);
+    std::vector<double> positions;
+    for (int i = 0; i < 2 * info.samples; ++i)
+    {
+        positions.push_back(dist(gen));
+    }
     std::cout << "Max iterations: ";
     std::cin >> info.maxIterations;
     std::cout << "Chaos: ";
@@ -296,7 +296,9 @@ int main()
               + std::to_string(info.chaos.real)
               + (info.chaos.imag >= 0. ? "+" : "")
               + std::to_string(info.chaos.imag)
-              + "i)",
+              + "i, "
+              + std::to_string(info.maxIterations)
+              + " iterations)",
               info.pixelWidth, info.pixelHeight);
 
     int yBegin = 0;
