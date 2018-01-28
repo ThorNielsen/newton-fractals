@@ -32,9 +32,19 @@
 			<Add option="-std=c++11" />
 			<Add option="-Wl,--no-as-needed" />
 			<Add option="-pthread" />
+			<Add directory="extern/include" />
 		</Compiler>
 		<Linker>
 			<Add library="pthread" />
+			<Add library="Xi" />
+			<Add library="Xxf86vm" />
+			<Add library="Xrandr" />
+			<Add library="X11" />
+			<Add library="sfml-audio" />
+			<Add library="sfml-network" />
+			<Add library="sfml-graphics" />
+			<Add library="sfml-window" />
+			<Add library="sfml-system" />
 		</Linker>
 		<Unit filename="newton.cpp" />
 		<Extensions>

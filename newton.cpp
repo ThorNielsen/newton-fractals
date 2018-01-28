@@ -7,16 +7,21 @@
 #include <random>
 #include <thread>
 
+#include "SFML/Window.hpp"
+#include "SFML/Graphics.hpp"
+
 struct Colour
 {
     uint8_t r;
     uint8_t g;
     uint8_t b;
-    Colour() : r{0}, g{0}, b{0} {}
-    Colour(uint8_t rx, uint8_t gx, uint8_t bx) : r{rx}, g{gx}, b{bx} {}
+    uint8_t a;
+    Colour() : r{0}, g{0}, b{0}, a{255} {}
+    Colour(uint8_t rx, uint8_t gx, uint8_t bx) : r{rx}, g{gx}, b{bx}, a{255} {}
     Colour(uint32_t c) : r((c&0xFF0000)>>16),
                           g((c&0xFF00)>>8),
-                          b(c&0xFF) {}
+                          b(c&0xFF),
+                          a{255} {}
 };
 
 struct Image
@@ -25,23 +30,31 @@ struct Image
     size_t width;
     size_t height;
     std::vector<uint8_t> p;
-    Image() = default;
+    Image() = delete;
     Image(std::string n, size_t w, size_t h)
     : name{n}, width{w}, height{h}
     {
-        p.resize(width*height*3);
+        p.resize(width*height*4);
+    }
+
+    void resize(size_t w, size_t h)
+    {
+        p.resize(w*h*4);
+        width = w;
+        height = h;
     }
 
     inline Colour pixel(size_t x, size_t y)
     {
-        return {p[3*width*y+3*x], p[3*width*y+3*x+1], p[3*width*y+3*x+2]};
+        return {p[4*width*y+4*x], p[4*width*y+4*x+1], p[4*width*y+4*x+2]};
     }
 
     inline void setPixel(size_t x, size_t y, Colour c)
     {
-        p[3*width*y+3*x] = c.r;
-        p[3*width*y+3*x+1] = c.g;
-        p[3*width*y+3*x+2] = c.b;
+        p[4*width*y+4*x] = c.r;
+        p[4*width*y+4*x+1] = c.g;
+        p[4*width*y+4*x+2] = c.b;
+        p[4*width*y+4*x+3] = 255;
     }
 };
 
@@ -177,8 +190,6 @@ void writeImage(Image img)
     file.write(reinterpret_cast<char*>(&img.p[0]), img.p.size());
 }
 
-// x_{n+1} = x_n - f(x_n)/f'(x_n)
-
 Colour hsv(float h, float s, float v)
 {
     float c = s * v;
@@ -193,6 +204,7 @@ Colour hsv(float h, float s, float v)
     return Colour(0, 0, 0);
 }
 
+// x_{n+1} = x_n - f(x_n)/f'(x_n)
 template <typename T>
 Colour newton(Complex<T> chaos, T x, T y, int exp, int maxIt = 256,
               T maxDist = 1e-12)
@@ -202,12 +214,18 @@ Colour newton(Complex<T> chaos, T x, T y, int exp, int maxIt = 256,
     Complex<T> p = pow(z, exp);
     Complex<T> pm = pow(z, exp-1);
     int it = 0;
-    while ((p-one).norm() > maxDist && ++it < maxIt)
+    auto pmn = (p-one).norm();
+    // Gives an interesting divergent effect:
+    // while (pmn > maxDist && ++it < maxIt && pmn <= std::numeric_limits<T>::max())
+    while (pmn > maxDist && ++it < maxIt
+           && p.real <= std::numeric_limits<T>::max()
+           && p.imag <= std::numeric_limits<T>::max())
     {
         auto denom = T(exp) * pm;
         z = z - chaos * (p-one) / denom;
         p = pow(z, exp);
         pm = pow(z, exp-1);
+        pmn = (p-one).norm();
     }
     return hsv(z.arg() + 3.14159265f, 1.f, 1.f - 0.05f * it / (float)maxIt);
 }
@@ -240,6 +258,18 @@ struct FractalInfo
     int maxIterations;
     int pixelWidth;
     int pixelHeight;
+    void recalculateWidth()
+    {
+        double aspect = static_cast<double>(pixelWidth)
+                        / static_cast<double>(pixelHeight);
+        width = aspect * height;
+    }
+    void recalculateHeight()
+    {
+        double aspect = static_cast<double>(pixelHeight)
+                        / static_cast<double>(pixelWidth);
+        height = aspect * width;
+    }
 };
 
 void calculateNewtonChunk(int xBegin, int xEnd, int yBegin, int yEnd,
@@ -261,9 +291,11 @@ void calculateNewtonChunk(int xBegin, int xEnd, int yBegin, int yEnd,
                                         info.maxIterations, 1e-16));
         }
     }
+    std::cout << "Calculated chunk [" << xBegin << ", " << xEnd << ")×["
+              << yBegin << ", " << yEnd << ")" << std::endl;
 }
 
-int main()
+FractalInfo getInfoFromStdin()
 {
     FractalInfo info;
     std::cout << "Complex plane height: ";
@@ -274,32 +306,73 @@ int main()
     std::cin >> info.exponent;
     std::cout << "Anti-aliasing samples: ";
     std::cin >> info.samples;
-    std::mt19937 gen;
-    std::uniform_real_distribution<double> dist(-.5, .5);
-    std::vector<double> positions;
-    for (int i = 0; i < 2 * info.samples; ++i)
-    {
-        positions.push_back(dist(gen));
-    }
     std::cout << "Max iterations: ";
     std::cin >> info.maxIterations;
     std::cout << "Chaos: ";
     std::cin >> info.chaos.real >> info.chaos.imag;
-    double aspect = static_cast<double>(info.pixelWidth)
-                    / static_cast<double>(info.pixelHeight);
-    info.width = aspect * info.height;
+    info.recalculateWidth();
+    return info;
+}
 
-    Image img("Newton fractal " + std::to_string(info.exponent)
-              + " (" + std::to_string(info.width)
-              + "x" + std::to_string(info.height) + ", "
-              + std::to_string(info.samples) + "AA, chaos:"
-              + std::to_string(info.chaos.real)
-              + (info.chaos.imag >= 0. ? "+" : "")
-              + std::to_string(info.chaos.imag)
-              + "i, "
-              + std::to_string(info.maxIterations)
-              + " iterations)",
-              info.pixelWidth, info.pixelHeight);
+FractalInfo defaultInfo()
+{
+    FractalInfo info;
+    info.height = 6.;
+    info.pixelWidth = 800;
+    info.pixelHeight = 600;
+    info.exponent = 6;
+    info.samples = 51;
+    info.maxIterations = 64;
+    info.chaos.real = 22.;
+    info.chaos.imag = 19.;
+    info.recalculateWidth();
+    return info;
+}
+
+std::string title(FractalInfo info)
+{
+    return "Newton fractal " + std::to_string(info.exponent)
+           + " (" + std::to_string(info.width)
+           + "x" + std::to_string(info.height) + ", "
+           + std::to_string(info.samples) + "AA, chaos:"
+           + std::to_string(info.chaos.real)
+           + (info.chaos.imag >= 0. ? "+" : "")
+           + std::to_string(info.chaos.imag)
+           + "i, "
+           + std::to_string(info.maxIterations)
+           + " iterations)";
+}
+
+std::vector<double> getAAPos(size_t samples)
+{
+    std::mt19937 gen;
+    std::uniform_real_distribution<double> dist(-.5, .5);
+    std::vector<double> positions;
+    for (int i = 0; i < 2 * samples; ++i)
+    {
+        positions.push_back(dist(gen));
+    }
+    return positions;
+}
+
+void recalculateImage()
+{
+
+}
+
+int main(int argc, char* argv[])
+{
+    FractalInfo info = defaultInfo();
+    if (argc > 1)
+    {
+        info = getInfoFromStdin();
+    }
+
+    sf::Texture texture;
+    texture.create(info.pixelWidth, info.pixelHeight);
+    sf::RenderWindow wnd(sf::VideoMode(info.pixelWidth, info.pixelHeight), "Bob");
+    Image img(title(info), info.pixelWidth, info.pixelHeight);
+    auto positions = getAAPos(info.samples);
 
     int yBegin = 0;
     auto maxThreads = std::thread::hardware_concurrency();
@@ -317,10 +390,31 @@ int main()
     calculateNewtonChunk(0, info.pixelWidth, yBegin, info.pixelHeight,
                          info, img, positions);
 
+    while (wnd.isOpen())
+    {
+        texture.update(img.p.data());
+        sf::Sprite sprite;
+        sprite.setTexture(texture);
+        wnd.clear();
+        wnd.draw(sprite);
+        wnd.display();
+        sf::Event evt;
+        while (wnd.pollEvent(evt))
+        {
+            if (evt.type == sf::Event::Closed)
+            {
+                wnd.close();
+            }
+        }
+    }
+
     for (auto& thread : threads)
     {
         thread.join();
     }
 
-    writeImage(img);
+    //writeImage(img);
+
+
+
 }
