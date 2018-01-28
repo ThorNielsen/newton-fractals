@@ -30,7 +30,7 @@ struct Image
     size_t width;
     size_t height;
     std::vector<uint8_t> p;
-    Image() = delete;
+    Image() = default;
     Image(std::string n, size_t w, size_t h)
     : name{n}, width{w}, height{h}
     {
@@ -274,7 +274,8 @@ struct FractalInfo
 
 void calculateNewtonChunk(int xBegin, int xEnd, int yBegin, int yEnd,
                           FractalInfo info, Image& img,
-                          const std::vector<double>& aaPos)
+                          const std::vector<double>& aaPos,
+                          int* done)
 {
     double fx = info.width / static_cast<double>(info.pixelWidth);
     double px = info.width * 0.5;
@@ -293,6 +294,7 @@ void calculateNewtonChunk(int xBegin, int xEnd, int yBegin, int yEnd,
     }
     std::cout << "Calculated chunk [" << xBegin << ", " << xEnd << ")×["
               << yBegin << ", " << yEnd << ")" << std::endl;
+    *done = 1;
 }
 
 FractalInfo getInfoFromStdin()
@@ -321,7 +323,7 @@ FractalInfo defaultInfo()
     info.pixelWidth = 800;
     info.pixelHeight = 600;
     info.exponent = 6;
-    info.samples = 51;
+    info.samples = 1;
     info.maxIterations = 64;
     info.chaos.real = 22.;
     info.chaos.imag = 19.;
@@ -355,49 +357,83 @@ std::vector<double> getAAPos(size_t samples)
     return positions;
 }
 
-void recalculateImage()
+struct ImageRenderer
 {
+    Image img;
+    FractalInfo info;
+    ~ImageRenderer()
+    {
+        for (auto& thread : threads)
+        {
+            thread.join();
+        }
+    }
 
-}
+    bool isReady() const
+    {
+        size_t i = 0;
+        for (auto d : done)
+        {
+            if (!d) return false;
+        }
+        return true;
+    }
+
+    void calculate()
+    {
+        if (!isReady()) return;
+        done.clear();
+        for (auto& thread : threads)
+        {
+            thread.join();
+        }
+        threads.clear();
+
+        std::cout << "Resizing image to " << info.pixelWidth << "x" << info.pixelHeight << std::endl;
+        img.resize(info.pixelWidth, info.pixelHeight);
+
+        int yBegin = 0;
+        auto maxThreads = std::thread::hardware_concurrency();
+        done.resize(maxThreads);
+
+        int chunkHeight = info.pixelHeight / maxThreads;
+        auto positions = getAAPos(info.samples);
+        for (unsigned i = 0; i < maxThreads; ++i)
+        {
+            threads.emplace_back(calculateNewtonChunk, 0, info.pixelWidth,
+                                 yBegin, yBegin + chunkHeight, info, std::ref(img),
+                                 positions, &done[i]);
+            yBegin += chunkHeight;
+        }
+
+        int dummy = 0;
+        calculateNewtonChunk(0, info.pixelWidth, yBegin, info.pixelHeight,
+                             info, img, positions, &dummy);
+        std::cout << dummy << std::endl;
+    }
+
+private:
+    std::vector<int> done;
+    std::vector<std::thread> threads;
+};
 
 int main(int argc, char* argv[])
 {
-    FractalInfo info = defaultInfo();
+    ImageRenderer ir;
+    ir.info = defaultInfo();
     if (argc > 1)
     {
-        info = getInfoFromStdin();
+        ir.info = getInfoFromStdin();
     }
 
-    sf::Texture texture;
-    texture.create(info.pixelWidth, info.pixelHeight);
-    sf::RenderWindow wnd(sf::VideoMode(info.pixelWidth, info.pixelHeight), "Bob");
-    Image img(title(info), info.pixelWidth, info.pixelHeight);
-    auto positions = getAAPos(info.samples);
+    sf::RenderWindow wnd(sf::VideoMode(ir.info.pixelWidth, ir.info.pixelHeight), "Bob");
 
-    int yBegin = 0;
-    auto maxThreads = std::thread::hardware_concurrency();
-    int chunkHeight = info.pixelHeight / maxThreads;
+    ir.calculate();
 
-    std::vector<std::thread> threads;
-    for (unsigned i = 0; i < maxThreads; ++i)
-    {
-        threads.emplace_back(calculateNewtonChunk, 0, info.pixelWidth,
-                             yBegin, yBegin + chunkHeight, info, std::ref(img),
-                             positions);
-        yBegin += chunkHeight;
-    }
-
-    calculateNewtonChunk(0, info.pixelWidth, yBegin, info.pixelHeight,
-                         info, img, positions);
+    decltype(wnd.getSize()) lastSize = {0, 0};
 
     while (wnd.isOpen())
     {
-        texture.update(img.p.data());
-        sf::Sprite sprite;
-        sprite.setTexture(texture);
-        wnd.clear();
-        wnd.draw(sprite);
-        wnd.display();
         sf::Event evt;
         while (wnd.pollEvent(evt))
         {
@@ -406,15 +442,27 @@ int main(int argc, char* argv[])
                 wnd.close();
             }
         }
-    }
+        wnd.clear();
+        auto sz = wnd.getSize();
+        if (lastSize != sz && ir.isReady())
+        {
+            std::cout << sz.x << ", " << sz.y << std::endl;
+            lastSize = sz;
+            ir.info.pixelWidth = sz.x;
+            ir.info.pixelHeight = sz.y;
+            ir.info.recalculateWidth();
+            std::cout << "ir.info.width: " << ir.info.width << std::endl;
+            ir.calculate();
+        }
+        sf::Texture texture;
+        texture.create(ir.info.pixelWidth, ir.info.pixelHeight);
+        texture.update(ir.img.p.data());
+        sf::Sprite sprite;
+        sprite.setTexture(texture);
+        //sprite.setTextureRect(sf::IntRect(0, 0, 640, 480));
 
-    for (auto& thread : threads)
-    {
-        thread.join();
+        wnd.draw(sprite);
+        wnd.display();
     }
-
     //writeImage(img);
-
-
-
 }
