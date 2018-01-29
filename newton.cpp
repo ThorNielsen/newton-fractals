@@ -323,7 +323,7 @@ FractalInfo defaultInfo()
     info.pixelWidth = 800;
     info.pixelHeight = 600;
     info.exponent = 6;
-    info.samples = 1;
+    info.samples = 51;
     info.maxIterations = 64;
     info.chaos.real = 22.;
     info.chaos.imag = 19.;
@@ -442,16 +442,15 @@ int main(int argc, char* argv[])
                 wnd.close();
             }
         }
-        wnd.clear();
+        wnd.clear(sf::Color::Blue);
         auto sz = wnd.getSize();
+        wnd.setView(sf::View(sf::FloatRect(0, 0, sz.x, sz.y)));
         if (lastSize != sz && ir.isReady())
         {
-            std::cout << sz.x << ", " << sz.y << std::endl;
             lastSize = sz;
             ir.info.pixelWidth = sz.x;
             ir.info.pixelHeight = sz.y;
             ir.info.recalculateWidth();
-            std::cout << "ir.info.width: " << ir.info.width << std::endl;
             ir.calculate();
         }
         sf::Texture texture;
@@ -459,7 +458,6 @@ int main(int argc, char* argv[])
         texture.update(ir.img.p.data());
         sf::Sprite sprite;
         sprite.setTexture(texture);
-        //sprite.setTextureRect(sf::IntRect(0, 0, 640, 480));
 
         wnd.draw(sprite);
         wnd.display();
