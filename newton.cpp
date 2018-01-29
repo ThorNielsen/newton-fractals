@@ -31,7 +31,7 @@ struct Image
     size_t height;
     std::vector<uint8_t> p;
     Image() = default;
-    Image(std::string n, size_t w, size_t h)
+    Image(size_t w, size_t h, std::string n = "")
     : name{n}, width{w}, height{h}
     {
         p.resize(width*height*4);
@@ -51,7 +51,7 @@ struct Image
         }
     }
 
-    inline Colour pixel(size_t x, size_t y)
+    inline Colour pixel(size_t x, size_t y) const
     {
         return {p[4*width*y+4*x], p[4*width*y+4*x+1], p[4*width*y+4*x+2]};
     }
@@ -258,6 +258,8 @@ Colour newtonAA(T pWidth, T pHeight, int samples,
 struct FractalInfo
 {
     Complex<double> chaos;
+    double left;
+    double top;
     double width;
     double height;
     int exponent;
@@ -277,6 +279,14 @@ struct FractalInfo
                         / static_cast<double>(pixelWidth);
         height = aspect * width;
     }
+    double xStep() const
+    {
+        return width / static_cast<double>(pixelWidth);
+    }
+    double yStep() const
+    {
+        return height / static_cast<double>(pixelHeight);
+    }
 };
 
 void calculateNewtonChunk(int xBegin, int xEnd, int yBegin, int yEnd,
@@ -284,19 +294,22 @@ void calculateNewtonChunk(int xBegin, int xEnd, int yBegin, int yEnd,
                           const std::vector<double>& aaPos,
                           int* done, const bool& shouldExit)
 {
-    double fx = info.width / static_cast<double>(info.pixelWidth);
-    double px = info.width * 0.5;
-    double fy = info.height / static_cast<double>(info.pixelHeight);
-    double py = info.height * 0.5;
+    double xs = info.xStep();
+    double ys = info.yStep();
+    double xb = info.left;
+    double yb = info.top;
+    size_t it = 0;
     for (int x = xBegin; x < xEnd && !shouldExit; ++x)
     {
         for (int y = yBegin; y < yEnd; ++y)
         {
-            double cx = fx * x - px;
-            double cy = fy * y - py;
-            img.setPixel(x, y, newtonAA(fx, fy, info.samples, aaPos, info.chaos,
+            ++it;
+            double cx = xs * x + xb;
+            double cy = ys * y + yb;
+            img.setPixel(x, y, newtonAA(xs, ys, info.samples, aaPos, info.chaos,
                                         cx, cy, info.exponent,
                                         info.maxIterations, 1e-16));
+
         }
     }
     *done = shouldExit ? 2 : 1;
@@ -328,7 +341,7 @@ FractalInfo defaultInfo()
     info.pixelWidth = 800;
     info.pixelHeight = 600;
     info.exponent = 6;
-    info.samples = 15;
+    info.samples = 51;
     info.maxIterations = 128;
     info.chaos.real = -8.;
     info.chaos.imag = 0.;
@@ -400,11 +413,15 @@ struct ImageRenderer
         threads.clear();
 
         shouldExit = false;
-        img.resize(info.pixelWidth, info.pixelHeight);
+        if (info.pixelWidth != img.width || info.pixelHeight != img.height)
+        {
+            std::cout << "Resizing from " << img.width << "x" << img.height << " to " << info.pixelWidth << "x" << info.pixelHeight << std::endl;
+            img.resize(info.pixelWidth, info.pixelHeight);
+        }
 
         int yBegin = 0;
         auto maxThreads = std::thread::hardware_concurrency();
-        done.resize(maxThreads);
+        done.resize(maxThreads+1, false);
 
         int chunkHeight = info.pixelHeight / maxThreads;
         auto positions = getAAPos(info.samples);
@@ -416,10 +433,10 @@ struct ImageRenderer
             yBegin += chunkHeight;
         }
 
-        int dummy = 0;
-        calculateNewtonChunk(0, info.pixelWidth, yBegin, info.pixelHeight,
-                             info, img, positions, &dummy, shouldExit);
-        std::cout << dummy << std::endl;
+        threads.emplace_back(calculateNewtonChunk, 0, info.pixelWidth,
+                             yBegin, info.pixelHeight, info, std::ref(img),
+                             positions, &done[done.size()-1],
+                             std::ref(shouldExit));
     }
 
 private:
@@ -427,6 +444,38 @@ private:
     std::vector<std::thread> threads;
     bool shouldExit = false;
 };
+
+Image renderPreliminary(FractalInfo info, int rx = 2, int ry = 2)
+{
+    info.samples = 1;
+    info.width  *=  1 << rx;
+    info.height *=  1 << ry;
+    auto scaledWidth = std::max(info.pixelWidth >> rx, 1);
+    auto scaledHeight = std::max(info.pixelHeight >> ry, 1);
+    Image small(scaledWidth, scaledHeight);
+    int dummyDone = 0;
+    for (size_t x = 0; x < scaledWidth; ++x)
+    {
+        for (size_t y = 0; y < scaledHeight; ++y)
+        {
+            small.setPixel(x, y, x+y);
+        }
+    }
+    auto pos = getAAPos(info.samples);
+    calculateNewtonChunk(0, scaledWidth, 0, scaledHeight,
+                         info, small, pos,
+                         &dummyDone, false);
+
+    Image upscaled(info.pixelWidth, info.pixelHeight);
+    for (size_t x = 0; x < info.pixelWidth; ++x)
+    {
+        for (size_t y = 0; y < info.pixelHeight; ++y)
+        {
+            upscaled.setPixel(x, y, small.pixel(x>>rx, y>>ry));
+        }
+    }
+    return upscaled;
+}
 
 int main(int argc, char* argv[])
 {
@@ -443,6 +492,9 @@ int main(int argc, char* argv[])
     auto lastSize = wnd.getSize();
 
     bool needsRender = true;
+
+    bool thumbUpdated = false;
+    Image thumb;
 
     while (wnd.isOpen())
     {
@@ -462,6 +514,17 @@ int main(int argc, char* argv[])
         {
             lastSize = sz;
             needsRender = true;
+            thumbUpdated = false;
+        }
+
+        if (!thumbUpdated)
+        {
+            FractalInfo thumbInfo = ir.info;
+            thumbInfo.pixelWidth = sz.x;
+            thumbInfo.pixelHeight = sz.y;
+            thumbInfo.recalculateWidth();
+            thumb = renderPreliminary(thumbInfo, 3, 3);
+            thumbUpdated = true;
         }
 
         if (needsRender)
@@ -472,6 +535,9 @@ int main(int argc, char* argv[])
                 ir.info.pixelWidth = sz.x;
                 ir.info.pixelHeight = sz.y;
                 ir.info.recalculateWidth();
+
+                ir.img = thumb;
+
                 ir.calculate();
                 needsRender = false;
             }
@@ -481,7 +547,7 @@ int main(int argc, char* argv[])
             }
         }
         sf::Texture texture;
-        texture.create(ir.info.pixelWidth, ir.info.pixelHeight);
+        texture.create(ir.img.width, ir.img.height);
         texture.update(ir.img.p.data());
         sf::Sprite sprite;
         sprite.setTexture(texture);
