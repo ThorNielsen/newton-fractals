@@ -34,6 +34,7 @@ struct Image
     Image(std::string n, size_t w, size_t h)
     : name{n}, width{w}, height{h}
     {
+        p.clear();
         p.resize(width*height*4);
     }
 
@@ -275,13 +276,13 @@ struct FractalInfo
 void calculateNewtonChunk(int xBegin, int xEnd, int yBegin, int yEnd,
                           FractalInfo info, Image& img,
                           const std::vector<double>& aaPos,
-                          int* done)
+                          int* done, const bool& shouldExit)
 {
     double fx = info.width / static_cast<double>(info.pixelWidth);
     double px = info.width * 0.5;
     double fy = info.height / static_cast<double>(info.pixelHeight);
     double py = info.height * 0.5;
-    for (int x = xBegin; x < xEnd; ++x)
+    for (int x = xBegin; x < xEnd && !shouldExit; ++x)
     {
         for (int y = yBegin; y < yEnd; ++y)
         {
@@ -379,6 +380,11 @@ struct ImageRenderer
         return true;
     }
 
+    void requestStop()
+    {
+        shouldExit = true;
+    }
+
     void calculate()
     {
         if (!isReady()) return;
@@ -389,7 +395,8 @@ struct ImageRenderer
         }
         threads.clear();
 
-        std::cout << "Resizing image to " << info.pixelWidth << "x" << info.pixelHeight << std::endl;
+        shouldExit = false;
+        //std::cout << "Resizing image to " << info.pixelWidth << "x" << info.pixelHeight << std::endl;
         img.resize(info.pixelWidth, info.pixelHeight);
 
         int yBegin = 0;
@@ -402,19 +409,20 @@ struct ImageRenderer
         {
             threads.emplace_back(calculateNewtonChunk, 0, info.pixelWidth,
                                  yBegin, yBegin + chunkHeight, info, std::ref(img),
-                                 positions, &done[i]);
+                                 positions, &done[i], std::ref(shouldExit));
             yBegin += chunkHeight;
         }
 
         int dummy = 0;
         calculateNewtonChunk(0, info.pixelWidth, yBegin, info.pixelHeight,
-                             info, img, positions, &dummy);
+                             info, img, positions, &dummy, shouldExit);
         std::cout << dummy << std::endl;
     }
 
 private:
     std::vector<int> done;
     std::vector<std::thread> threads;
+    bool shouldExit = false;
 };
 
 int main(int argc, char* argv[])
@@ -428,9 +436,9 @@ int main(int argc, char* argv[])
 
     sf::RenderWindow wnd(sf::VideoMode(ir.info.pixelWidth, ir.info.pixelHeight), "Bob");
 
-    ir.calculate();
+    auto lastSize = wnd.getSize();
 
-    decltype(wnd.getSize()) lastSize = {0, 0};
+    bool needsRender = true;
 
     while (wnd.isOpen())
     {
@@ -442,16 +450,31 @@ int main(int argc, char* argv[])
                 wnd.close();
             }
         }
-        wnd.clear(sf::Color::Blue);
+        wnd.clear(sf::Color::Black);
         auto sz = wnd.getSize();
         wnd.setView(sf::View(sf::FloatRect(0, 0, sz.x, sz.y)));
-        if (lastSize != sz && ir.isReady())
+
+        if (lastSize != sz)
         {
             lastSize = sz;
-            ir.info.pixelWidth = sz.x;
-            ir.info.pixelHeight = sz.y;
-            ir.info.recalculateWidth();
-            ir.calculate();
+            needsRender = true;
+        }
+
+        if (needsRender)
+        {
+            if (ir.isReady())
+            {
+                lastSize = sz;
+                ir.info.pixelWidth = sz.x;
+                ir.info.pixelHeight = sz.y;
+                ir.info.recalculateWidth();
+                ir.calculate();
+                needsRender = false;
+            }
+            else
+            {
+                ir.requestStop();
+            }
         }
         sf::Texture texture;
         texture.create(ir.info.pixelWidth, ir.info.pixelHeight);
