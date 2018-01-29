@@ -493,9 +493,6 @@ int main(int argc, char* argv[])
 
     bool needsRender = true;
 
-    bool thumbUpdated = false;
-    Image thumb;
-
     while (wnd.isOpen())
     {
         sf::Event evt;
@@ -504,6 +501,33 @@ int main(int argc, char* argv[])
             if (evt.type == sf::Event::Closed)
             {
                 wnd.close();
+            }
+            if (evt.type == sf::Event::KeyPressed)
+            {
+                if (evt.key.code == sf::Keyboard::Left) ir.info.left -= 0.025 * ir.info.width;
+                if (evt.key.code == sf::Keyboard::Right) ir.info.left += 0.025 * ir.info.width;
+                if (evt.key.code == sf::Keyboard::Up) ir.info.top -= 0.025 * ir.info.height;
+                if (evt.key.code == sf::Keyboard::Down) ir.info.top += 0.025 * ir.info.height;
+                if (evt.key.code == sf::Keyboard::I)
+                {
+                    ir.info.left += 0.1 * ir.info.width;
+                    ir.info.width *= 0.8;
+                    ir.info.top += 0.1 * ir.info.height;
+                    ir.info.height *= 0.8;
+                }
+                if (evt.key.code == sf::Keyboard::O)
+                {
+                    ir.info.width *= 1.25;
+                    ir.info.left -= 0.1 * ir.info.width;
+                    ir.info.height *= 1.25;
+                    ir.info.top -= 0.1 * ir.info.height;
+                }
+                if (evt.key.code == sf::Keyboard::Escape)
+                {
+                    wnd.close();
+                }
+
+                needsRender = true;
             }
         }
         wnd.clear(sf::Color::Black);
@@ -514,21 +538,16 @@ int main(int argc, char* argv[])
         {
             lastSize = sz;
             needsRender = true;
-            thumbUpdated = false;
         }
 
-        if (!thumbUpdated)
+
+        if (needsRender)
         {
             FractalInfo thumbInfo = ir.info;
             thumbInfo.pixelWidth = sz.x;
             thumbInfo.pixelHeight = sz.y;
             thumbInfo.recalculateWidth();
-            thumb = renderPreliminary(thumbInfo, 3, 3);
-            thumbUpdated = true;
-        }
-
-        if (needsRender)
-        {
+            auto thumb = renderPreliminary(thumbInfo, 3, 3);
             if (ir.isReady())
             {
                 lastSize = sz;
