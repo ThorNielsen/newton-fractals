@@ -34,7 +34,6 @@ struct Image
     Image(std::string n, size_t w, size_t h)
     : name{n}, width{w}, height{h}
     {
-        p.clear();
         p.resize(width*height*4);
     }
 
@@ -43,6 +42,13 @@ struct Image
         p.resize(w*h*4);
         width = w;
         height = h;
+        for (size_t x = 0; x < width; ++x)
+        {
+            for (size_t y = 0; y < height; ++y)
+            {
+                setPixel(x, y, (x+y)&1 ? 0 : 0xffffff);
+            }
+        }
     }
 
     inline Colour pixel(size_t x, size_t y)
@@ -293,9 +299,7 @@ void calculateNewtonChunk(int xBegin, int xEnd, int yBegin, int yEnd,
                                         info.maxIterations, 1e-16));
         }
     }
-    std::cout << "Calculated chunk [" << xBegin << ", " << xEnd << ")×["
-              << yBegin << ", " << yEnd << ")" << std::endl;
-    *done = 1;
+    *done = shouldExit ? 2 : 1;
 }
 
 FractalInfo getInfoFromStdin()
@@ -320,14 +324,14 @@ FractalInfo getInfoFromStdin()
 FractalInfo defaultInfo()
 {
     FractalInfo info;
-    info.height = 6.;
+    info.height = 4.;
     info.pixelWidth = 800;
     info.pixelHeight = 600;
     info.exponent = 6;
-    info.samples = 51;
-    info.maxIterations = 64;
-    info.chaos.real = 22.;
-    info.chaos.imag = 19.;
+    info.samples = 15;
+    info.maxIterations = 128;
+    info.chaos.real = -8.;
+    info.chaos.imag = 0.;
     info.recalculateWidth();
     return info;
 }
@@ -396,7 +400,6 @@ struct ImageRenderer
         threads.clear();
 
         shouldExit = false;
-        //std::cout << "Resizing image to " << info.pixelWidth << "x" << info.pixelHeight << std::endl;
         img.resize(info.pixelWidth, info.pixelHeight);
 
         int yBegin = 0;
@@ -435,6 +438,7 @@ int main(int argc, char* argv[])
     }
 
     sf::RenderWindow wnd(sf::VideoMode(ir.info.pixelWidth, ir.info.pixelHeight), "Bob");
+    wnd.setVerticalSyncEnabled(true);
 
     auto lastSize = wnd.getSize();
 
@@ -485,5 +489,6 @@ int main(int argc, char* argv[])
         wnd.draw(sprite);
         wnd.display();
     }
+    ir.requestStop();
     //writeImage(img);
 }
