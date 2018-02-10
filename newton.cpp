@@ -488,6 +488,41 @@ void zoom(FractalInfo& info, Complex<double> center, double amount)
     info.height = newHeight;
 }
 
+void getDragRectangle(Complex<double> dragBegin, Complex<double> dragEnd,
+                      double aspect, // height / width,
+                      double& x0, double& x1, double& y0, double& y1)
+{
+    x0 = dragBegin.real;
+    x1 = dragEnd.real;
+    y0 = dragBegin.imag;
+    y1 = dragEnd.imag;
+
+    double dxMin = std::min(dragBegin.real, dragEnd.real);
+    double dxMax = std::max(dragBegin.real, dragEnd.real);
+    double dyMin = std::min(dragBegin.imag, dragEnd.imag);
+    double dyMax = std::max(dragBegin.imag, dragEnd.imag);
+
+    double xLen = dxMax - dxMin;
+    double yLen = dyMax - dyMin;
+
+    bool xReverse = x0 > x1;
+    bool yReverse = y0 > y1;
+
+    if (xLen * aspect > yLen)
+    {
+        if (xReverse) std::swap(x0, x1);
+        if (yReverse) y1 = y0 - (x1 - x0) * aspect;
+        else          y1 = y0 + (x1 - x0) * aspect;
+    }
+
+    else
+    {
+        if (yReverse) std::swap(y0, y1);
+        if (xReverse) x1 = x0 - (y1 - y0) / aspect;
+        else          x1 = x0 + (y1 - y0) / aspect;
+    }
+}
+
 int main(int argc, char* argv[])
 {
     ImageRenderer ir;
@@ -642,19 +677,13 @@ int main(int argc, char* argv[])
         if (isDragging)
         {
             sf::VertexArray rect(sf::LinesStrip, 5);
-            Complex<double> leftTop = dragBegin, rightBottom = dragEnd;
-            if (leftTop.real > rightBottom.real)
-            {
-                std::swap(leftTop.real, rightBottom.real);
-            }
-            if (leftTop.imag > rightBottom.imag)
-            {
-                std::swap(leftTop.imag, rightBottom.imag);
-            }
-            rect[0].position = sf::Vector2f(leftTop.real, leftTop.imag);
-            rect[1].position = sf::Vector2f(leftTop.real, rightBottom.imag);
-            rect[3].position = sf::Vector2f(rightBottom.real, leftTop.imag);
-            rect[2].position = sf::Vector2f(rightBottom.real, rightBottom.imag);
+            double x0, x1, y0, y1;
+            getDragRectangle(dragBegin, dragEnd, (double)sz.y/sz.x,
+                             x0, x1, y0, y1);
+            rect[0].position = sf::Vector2f(x0, y0);
+            rect[1].position = sf::Vector2f(x0, y1);
+            rect[3].position = sf::Vector2f(x1, y0);
+            rect[2].position = sf::Vector2f(x1, y1);
             for (size_t i = 0; i < 4; ++i)
             {
                 rect[i].color = sf::Color::Red;
