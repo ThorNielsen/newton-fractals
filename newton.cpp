@@ -340,9 +340,9 @@ FractalInfo defaultInfo()
     info.height = 4.;
     info.pixelWidth = 800;
     info.pixelHeight = 600;
-    info.exponent = 6;
+    info.exponent = 10;
     info.samples = 51;
-    info.maxIterations = 128;
+    info.maxIterations = 96;
     info.chaos.real = -8.;
     info.chaos.imag = 0.;
     info.recalculateWidth();
@@ -450,8 +450,8 @@ Image renderPreliminary(FractalInfo info, int rx = 2, int ry = 2)
     info.samples = 1;
     info.width  *=  1 << rx;
     info.height *=  1 << ry;
-    auto scaledWidth = std::max(info.pixelWidth >> rx, 1);
-    auto scaledHeight = std::max(info.pixelHeight >> ry, 1);
+    auto scaledWidth = (info.pixelWidth >> rx) + 1;
+    auto scaledHeight = (info.pixelHeight >> ry) + 1;
     Image small(scaledWidth, scaledHeight);
     int dummyDone = 0;
     for (size_t x = 0; x < scaledWidth; ++x)
