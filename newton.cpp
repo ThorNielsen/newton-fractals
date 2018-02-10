@@ -573,6 +573,19 @@ FractalInfo extractInfo(int argc, char* argv[])
         {
             readFromArgs(info.maxIterations, i, argc, argv);
         }
+        else if (arg == "chaos")
+        {
+            readFromArgs(info.chaos.real, i, argc, argv);
+            readFromArgs(info.chaos.imag, i, argc, argv);
+        }
+        else if (arg == "r" || arg == "real")
+        {
+            readFromArgs(info.chaos.real, i, argc, argv);
+        }
+        else if (arg == "i" || arg == "imag")
+        {
+            readFromArgs(info.chaos.imag, i, argc, argv);
+        }
         else if (arg == "default"); // Do nothing; default arguments are used.
         else
         {
