@@ -491,7 +491,6 @@ void zoom(FractalInfo& info, Complex<double> center, double amount)
 }
 
 void getDragRectangle(Complex<double> dragBegin, Complex<double> dragEnd,
-                      double aspect, // height / width,
                       double& x0, double& x1, double& y0, double& y1)
 {
     x0 = dragBegin.real;
@@ -510,18 +509,18 @@ void getDragRectangle(Complex<double> dragBegin, Complex<double> dragEnd,
     bool xReverse = x0 > x1;
     bool yReverse = y0 > y1;
 
-    if (xLen > yLen * aspect)
+    if (xLen > yLen)
     {
         if (xReverse) std::swap(x0, x1);
-        if (yReverse) y1 = y0 - (x1 - x0) / aspect;
-        else          y1 = y0 + (x1 - x0) / aspect;
+        if (yReverse) y1 = y0 - (x1 - x0);
+        else          y1 = y0 + (x1 - x0);
     }
 
     else
     {
         if (yReverse) std::swap(y0, y1);
-        if (xReverse) x1 = x0 - (y1 - y0) * aspect;
-        else          x1 = x0 + (y1 - y0) * aspect;
+        if (xReverse) x1 = x0 - (y1 - y0);
+        else          x1 = x0 + (y1 - y0);
     }
 }
 
@@ -683,22 +682,16 @@ int main(int argc, char* argv[])
                 double mx = evt.mouseButton.x / (double)wnd.getSize().x;
                 double my = evt.mouseButton.y / (double)wnd.getSize().y;
                 dragEnd = {mx, my};
-                Complex<double> leftTop = dragBegin, rightBottom = dragEnd;
-                if (leftTop.real > rightBottom.real)
-                {
-                    std::swap(leftTop.real, rightBottom.real);
-                }
-                if (leftTop.imag > rightBottom.imag)
-                {
-                    std::swap(leftTop.imag, rightBottom.imag);
-                }
-                auto newWidth = rightBottom.real - leftTop.real;
-                auto newHeight = rightBottom.imag - leftTop.imag;
+                double x0, x1, y0, y1;
+                getDragRectangle(dragBegin, dragEnd,
+                                 x0, x1, y0, y1);
+                auto newWidth = x1-x0;
+                auto newHeight = y1-y0;
                 // Bad rectangle, we just continue processing events instead of
                 // zooming.
                 if (newWidth < 1e-6 || newHeight < 1e-6) continue;
-                ir.info.left += leftTop.real * ir.info.width;
-                ir.info.top += leftTop.imag * ir.info.height;
+                ir.info.left += x0 * ir.info.width;
+                ir.info.top += y0 * ir.info.height;
                 ir.info.width *= newWidth;
                 ir.info.height *= newHeight;
                 needsRender = true;
@@ -750,8 +743,10 @@ int main(int argc, char* argv[])
         {
             sf::VertexArray rect(sf::LinesStrip, 5);
             double x0, x1, y0, y1;
-            getDragRectangle(dragBegin, dragEnd, (double)sz.y/sz.x,
+            double aspect = (double)sz.y / sz.x;
+            getDragRectangle(dragBegin, dragEnd,
                              x0, x1, y0, y1);
+
             rect[0].position = sf::Vector2f(x0, y0);
             rect[1].position = sf::Vector2f(x0, y1);
             rect[3].position = sf::Vector2f(x1, y0);
@@ -768,5 +763,4 @@ int main(int argc, char* argv[])
         wnd.display();
     }
     ir.requestStop();
-    //writeImage(img);
 }
