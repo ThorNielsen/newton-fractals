@@ -346,6 +346,8 @@ FractalInfo defaultInfo()
     info.chaos.real = -8.;
     info.chaos.imag = 0.;
     info.recalculateWidth();
+    info.left = -0.5 * info.width;
+    info.top = -0.5 * info.height;
     return info;
 }
 
@@ -523,16 +525,73 @@ void getDragRectangle(Complex<double> dragBegin, Complex<double> dragEnd,
     }
 }
 
+std::string trimLeading(std::string s, char c)
+{
+    size_t idx = 0;
+    while (idx < s.size() && s[idx] == c) ++idx;
+    if (idx == s.size()) return "";
+    return s.substr(idx);
+}
+
+template <typename T>
+void readFromArgs(T& val, int& c, int argc, char* argv[])
+{
+    ++c;
+    if (c >= argc)
+    {
+        // Yes, I could throw an exception and let calling code deal with it but
+        // this is simpler and this function is only called once in order to
+        // read program arguments.
+        std::cerr << "Invalid argument.\n";
+        std::exit(1);
+    }
+    std::stringstream ss(argv[c]);
+    ss >> val;
+    if (ss.fail() || ss.bad())
+    {
+        std::cerr << "Unable to parse '" << argv[c] << "'.\n";
+        std::exit(2);
+    }
+}
+
+FractalInfo extractInfo(int argc, char* argv[])
+{
+    FractalInfo info = defaultInfo();
+    bool getFromStdin = argc == 1;
+    for (int i = 1; i < argc; ++i)
+    {
+        std::string arg = argv[i];
+        arg = trimLeading(arg, '-');
+        if (arg == "stdin") getFromStdin = true;
+        else if (arg == "left") readFromArgs(info.left, i, argc, argv);
+        else if (arg == "top") readFromArgs(info.top, i, argc, argv);
+        else if (arg == "width") readFromArgs(info.width, i, argc, argv);
+        else if (arg == "height") readFromArgs(info.height, i, argc, argv);
+        else if (arg == "exponent") readFromArgs(info.exponent, i, argc, argv);
+        else if (arg == "samples") readFromArgs(info.samples, i, argc, argv);
+        else if (arg == "iterations" || arg == "maxIterations")
+        {
+            readFromArgs(info.maxIterations, i, argc, argv);
+        }
+        else if (arg == "default"); // Do nothing; default arguments are used.
+        else
+        {
+            std::cerr << "Unrecognised argument: " << argv[i] << "\n";
+            std::exit(3);
+        }
+    }
+    if (getFromStdin) info = getInfoFromStdin();
+    return info;
+}
+
 int main(int argc, char* argv[])
 {
+    std::ios_base::sync_with_stdio(false);
     ImageRenderer ir;
-    ir.info = defaultInfo();
-    if (argc > 1)
-    {
-        ir.info = getInfoFromStdin();
-    }
+    ir.info = extractInfo(argc, argv);
 
-    sf::RenderWindow wnd(sf::VideoMode(ir.info.pixelWidth, ir.info.pixelHeight), "Bob");
+    sf::RenderWindow wnd(sf::VideoMode(ir.info.pixelWidth, ir.info.pixelHeight),
+                         "Newton fractal generator");
     wnd.setVerticalSyncEnabled(true);
 
     auto lastSize = wnd.getSize();
