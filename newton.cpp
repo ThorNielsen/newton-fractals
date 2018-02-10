@@ -477,6 +477,17 @@ Image renderPreliminary(FractalInfo info, int rx = 2, int ry = 2)
     return upscaled;
 }
 
+void zoom(FractalInfo& info, Complex<double> center, double amount)
+{
+    amount = 1. / amount;
+    auto newWidth = amount * info.width;
+    auto newHeight = amount * info.height;
+    info.left += center.real * info.width * (1. - amount);
+    info.top += center.imag * info.height * (1. - amount);
+    info.width = newWidth;
+    info.height = newHeight;
+}
+
 int main(int argc, char* argv[])
 {
     ImageRenderer ir;
@@ -493,6 +504,9 @@ int main(int argc, char* argv[])
 
     bool needsRender = true;
 
+    bool isDragging = false;
+    Complex<double> dragBegin{0., 0.}, dragEnd{0., 0.};
+
     while (wnd.isOpen())
     {
         sf::Event evt;
@@ -504,29 +518,82 @@ int main(int argc, char* argv[])
             }
             if (evt.type == sf::Event::KeyPressed)
             {
-                if (evt.key.code == sf::Keyboard::Left) ir.info.left -= 0.025 * ir.info.width;
-                if (evt.key.code == sf::Keyboard::Right) ir.info.left += 0.025 * ir.info.width;
-                if (evt.key.code == sf::Keyboard::Up) ir.info.top -= 0.025 * ir.info.height;
-                if (evt.key.code == sf::Keyboard::Down) ir.info.top += 0.025 * ir.info.height;
-                if (evt.key.code == sf::Keyboard::I)
+                needsRender = true;
+                switch (evt.key.code)
                 {
-                    ir.info.left += 0.1 * ir.info.width;
-                    ir.info.width *= 0.8;
-                    ir.info.top += 0.1 * ir.info.height;
-                    ir.info.height *= 0.8;
-                }
-                if (evt.key.code == sf::Keyboard::O)
-                {
-                    ir.info.width *= 1.25;
-                    ir.info.left -= 0.1 * ir.info.width;
-                    ir.info.height *= 1.25;
-                    ir.info.top -= 0.1 * ir.info.height;
-                }
-                if (evt.key.code == sf::Keyboard::Escape)
-                {
+                case sf::Keyboard::Left:
+                    ir.info.left -= 0.025 * ir.info.width;
+                    break;
+                case sf::Keyboard::Right:
+                    ir.info.left += 0.025 * ir.info.width;
+                    break;
+                case sf::Keyboard::Up:
+                    ir.info.top -= 0.025 * ir.info.height;
+                    break;
+                case sf::Keyboard::Down:
+                    ir.info.top += 0.025 * ir.info.height;
+                    break;
+                case sf::Keyboard::I:
+                    zoom(ir.info, {0.5, 0.5}, 1.25);
+                    break;
+                case sf::Keyboard::O:
+                    zoom(ir.info, {0.5, 0.5}, 0.8);
+                    break;
+                case sf::Keyboard::Escape:
                     wnd.close();
+                    break;
+                default:
+                    needsRender = false;
                 }
-
+            }
+            if (evt.type == sf::Event::MouseButtonPressed)
+            {
+                double mx = evt.mouseButton.x / (double)wnd.getSize().x;
+                double my = evt.mouseButton.y / (double)wnd.getSize().y;
+                if (evt.mouseButton.button == sf::Mouse::Left)
+                {
+                    isDragging = true;
+                    dragBegin = {mx, my};
+                    dragEnd = dragBegin;
+                }
+                if (evt.mouseButton.button == sf::Mouse::Right)
+                {
+                    zoom(ir.info, {mx, my}, 0.8);
+                    needsRender = true;
+                }
+            }
+            if (evt.type == sf::Event::MouseMoved
+                && sf::Mouse::isButtonPressed(sf::Mouse::Left))
+            {
+                double mx = evt.mouseMove.x / (double)wnd.getSize().x;
+                double my = evt.mouseMove.y / (double)wnd.getSize().y;
+                dragEnd = {mx, my};
+            }
+            if (evt.type == sf::Event::MouseButtonReleased
+                && evt.mouseButton.button == sf::Mouse::Left)
+            {
+                isDragging = false;
+                double mx = evt.mouseButton.x / (double)wnd.getSize().x;
+                double my = evt.mouseButton.y / (double)wnd.getSize().y;
+                dragEnd = {mx, my};
+                Complex<double> leftTop = dragBegin, rightBottom = dragEnd;
+                if (leftTop.real > rightBottom.real)
+                {
+                    std::swap(leftTop.real, rightBottom.real);
+                }
+                if (leftTop.imag > rightBottom.imag)
+                {
+                    std::swap(leftTop.imag, rightBottom.imag);
+                }
+                auto newWidth = rightBottom.real - leftTop.real;
+                auto newHeight = rightBottom.imag - leftTop.imag;
+                // Bad rectangle, we just continue processing events instead of
+                // zooming.
+                if (newWidth < 1e-6 || newHeight < 1e-6) continue;
+                ir.info.left += leftTop.real * ir.info.width;
+                ir.info.top += leftTop.imag * ir.info.height;
+                ir.info.width *= newWidth;
+                ir.info.height *= newHeight;
                 needsRender = true;
             }
         }
@@ -572,6 +639,31 @@ int main(int argc, char* argv[])
         sprite.setTexture(texture);
 
         wnd.draw(sprite);
+        if (isDragging)
+        {
+            sf::VertexArray rect(sf::LinesStrip, 5);
+            Complex<double> leftTop = dragBegin, rightBottom = dragEnd;
+            if (leftTop.real > rightBottom.real)
+            {
+                std::swap(leftTop.real, rightBottom.real);
+            }
+            if (leftTop.imag > rightBottom.imag)
+            {
+                std::swap(leftTop.imag, rightBottom.imag);
+            }
+            rect[0].position = sf::Vector2f(leftTop.real, leftTop.imag);
+            rect[1].position = sf::Vector2f(leftTop.real, rightBottom.imag);
+            rect[3].position = sf::Vector2f(rightBottom.real, leftTop.imag);
+            rect[2].position = sf::Vector2f(rightBottom.real, rightBottom.imag);
+            for (size_t i = 0; i < 4; ++i)
+            {
+                rect[i].color = sf::Color::Red;
+                rect[i].position.x *= sz.x;
+                rect[i].position.y *= sz.y;
+            }
+            rect[4] = rect[0];
+            wnd.draw(rect);
+        }
         wnd.display();
     }
     ir.requestStop();
