@@ -508,18 +508,18 @@ void getDragRectangle(Complex<double> dragBegin, Complex<double> dragEnd,
     bool xReverse = x0 > x1;
     bool yReverse = y0 > y1;
 
-    if (xLen * aspect > yLen)
+    if (xLen > yLen * aspect)
     {
         if (xReverse) std::swap(x0, x1);
-        if (yReverse) y1 = y0 - (x1 - x0) * aspect;
-        else          y1 = y0 + (x1 - x0) * aspect;
+        if (yReverse) y1 = y0 - (x1 - x0) / aspect;
+        else          y1 = y0 + (x1 - x0) / aspect;
     }
 
     else
     {
         if (yReverse) std::swap(y0, y1);
-        if (xReverse) x1 = x0 - (y1 - y0) / aspect;
-        else          x1 = x0 + (y1 - y0) / aspect;
+        if (xReverse) x1 = x0 - (y1 - y0) * aspect;
+        else          x1 = x0 + (y1 - y0) * aspect;
     }
 }
 
