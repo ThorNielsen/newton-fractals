@@ -175,13 +175,6 @@ void writePnmHeader(std::ofstream& file, size_t width, size_t height)
 void writeImage(Image img)
 {
     std::ofstream file;
-    if (img.name[img.name.length() - 4] != '.' ||
-        img.name[img.name.length() - 3] != 'p' ||
-        img.name[img.name.length() - 2] != 'n' ||
-        img.name[img.name.length() - 1] != 'm')
-    {
-        img.name += ".pnm";
-    }
     file.open((img.name).c_str());
     if (!file.is_open())
     {
@@ -192,9 +185,22 @@ void writeImage(Image img)
     writePnmHeader(file, img.width, img.height);
     if (img.p.size() != 3*img.width*img.height)
     {
+        auto pixels = img.width * img.height;
+        if (img.p.size() == 4*pixels)
+        {
+            std::vector<uint8_t> data(3*pixels);
+            for (size_t i = 0; i < pixels; ++i)
+            {
+                data[3*i  ] = img.p[4*i  ];
+                data[3*i+1] = img.p[4*i+1];
+                data[3*i+2] = img.p[4*i+2];
+            }
+            file.write(reinterpret_cast<const char*>(data.data()), data.size());
+            return;
+        }
         throw std::runtime_error("Image width and/or height is wrong.");
     }
-    file.write(reinterpret_cast<char*>(&img.p[0]), img.p.size());
+    file.write(reinterpret_cast<const char*>(&img.p[0]), img.p.size());
 }
 
 Colour hsv(float h, float s, float v)
@@ -381,6 +387,7 @@ struct ImageRenderer
 {
     Image img;
     FractalInfo info;
+
     ~ImageRenderer()
     {
         for (auto& thread : threads)
@@ -397,6 +404,15 @@ struct ImageRenderer
             if (!d) return false;
         }
         return true;
+    }
+
+    void waitToEnd()
+    {
+        for (auto& thread : threads)
+        {
+            thread.join();
+        }
+        threads.clear();
     }
 
     void requestStop()
@@ -417,7 +433,7 @@ struct ImageRenderer
         shouldExit = false;
         if (info.pixelWidth != img.width || info.pixelHeight != img.height)
         {
-            std::cout << "Resizing from " << img.width << "x" << img.height << " to " << info.pixelWidth << "x" << info.pixelHeight << std::endl;
+            //std::cout << "Resizing to " << info.pixelWidth << "x" << info.pixelHeight << std::endl;
             img.resize(info.pixelWidth, info.pixelHeight);
         }
 
@@ -553,19 +569,25 @@ void readFromArgs(T& val, int& c, int argc, char* argv[])
     }
 }
 
-FractalInfo extractInfo(int argc, char* argv[])
+FractalInfo extractInfo(int argc, char* argv[], bool& saveImage, std::string& dest)
 {
+    saveImage = false;
     FractalInfo info = defaultInfo();
+    double xCenter = 0;
+    double yCenter = 0;
+    info.width = 0;
+    info.height = 0;
+
     bool getFromStdin = argc == 1;
     for (int i = 1; i < argc; ++i)
     {
         std::string arg = argv[i];
         arg = trimLeading(arg, '-');
         if (arg == "stdin") getFromStdin = true;
-        else if (arg == "left") readFromArgs(info.left, i, argc, argv);
-        else if (arg == "top") readFromArgs(info.top, i, argc, argv);
         else if (arg == "width") readFromArgs(info.width, i, argc, argv);
         else if (arg == "height") readFromArgs(info.height, i, argc, argv);
+        else if (arg == "pixelWidth") readFromArgs(info.pixelWidth, i, argc, argv);
+        else if (arg == "pixelHeight") readFromArgs(info.pixelHeight, i, argc, argv);
         else if (arg == "exponent") readFromArgs(info.exponent, i, argc, argv);
         else if (arg == "samples") readFromArgs(info.samples, i, argc, argv);
         else if (arg == "iterations" || arg == "maxIterations")
@@ -585,6 +607,17 @@ FractalInfo extractInfo(int argc, char* argv[])
         {
             readFromArgs(info.chaos.imag, i, argc, argv);
         }
+        else if (arg == "save")
+        {
+            readFromArgs(dest, i, argc, argv);
+            saveImage = true;
+        }
+        else if (arg == "center")
+        {
+            double x, y;
+            readFromArgs(x, i, argc, argv);
+            readFromArgs(y, i, argc, argv);
+        }
         else if (arg == "default"); // Do nothing; default arguments are used.
         else
         {
@@ -593,14 +626,37 @@ FractalInfo extractInfo(int argc, char* argv[])
         }
     }
     if (getFromStdin) info = getInfoFromStdin();
+    if (info.height <= 0. && info.width <= 0.)
+    {
+        info.height = 4.;
+    }
+    if (info.height <= 0.) info.recalculateHeight();
+    if (info.width <= 0.) info.recalculateWidth();
+    info.left = xCenter - info.width / 2;
+    info.top = yCenter - info.height / 2;
     return info;
 }
 
 int main(int argc, char* argv[])
 {
     std::ios_base::sync_with_stdio(false);
+
+    bool saveImage = false;
+    std::string dest;
+
     ImageRenderer ir;
-    ir.info = extractInfo(argc, argv);
+    ir.info = extractInfo(argc, argv, saveImage, dest);
+
+    if (saveImage)
+    {
+        std::cout << "Calculating..." << std::flush;
+        ir.calculate();
+        ir.waitToEnd();
+        std::cout << "done!" << std::endl;
+        ir.img.name = dest;
+        writeImage(ir.img);
+        return 0;
+    }
 
     sf::RenderWindow wnd(sf::VideoMode(ir.info.pixelWidth, ir.info.pixelHeight),
                          "Newton fractal generator");
