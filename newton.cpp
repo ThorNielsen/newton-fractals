@@ -718,10 +718,15 @@ int main(int argc, char* argv[])
                     dragBegin = {mx, my};
                     dragEnd = dragBegin;
                 }
-                if (evt.mouseButton.button == sf::Mouse::Right)
+                if (evt.mouseButton.button == sf::Mouse::Right && !isDragging)
                 {
                     zoom(ir.info, {mx, my}, 0.8);
                     needsRender = true;
+                }
+                if (evt.mouseButton.button == sf::Mouse::Right && isDragging)
+                {
+                    isDragging = false;
+                    dragEnd = dragBegin;
                 }
             }
             if (evt.type == sf::Event::MouseMoved
@@ -731,7 +736,8 @@ int main(int argc, char* argv[])
                 double my = evt.mouseMove.y / (double)wnd.getSize().y;
                 dragEnd = {mx, my};
             }
-            if (evt.type == sf::Event::MouseButtonReleased
+            if (isDragging
+                && evt.type == sf::Event::MouseButtonReleased
                 && evt.mouseButton.button == sf::Mouse::Left)
             {
                 isDragging = false;
@@ -743,6 +749,16 @@ int main(int argc, char* argv[])
                                  x0, x1, y0, y1);
                 auto newWidth = x1-x0;
                 auto newHeight = y1-y0;
+                if (newWidth < 0.)
+                {
+                    x0 = x1;
+                    newWidth = -newWidth;
+                }
+                if (newHeight < 0.)
+                {
+                    y0 = y1;
+                    newHeight = -newHeight;
+                }
                 // Bad rectangle, we just continue processing events instead of
                 // zooming.
                 if (newWidth < 1e-6 || newHeight < 1e-6) continue;
