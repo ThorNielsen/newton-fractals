@@ -10,6 +10,8 @@
 #include "SFML/Window.hpp"
 #include "SFML/Graphics.hpp"
 
+using Prec = float;
+
 struct Colour
 {
     uint8_t r;
@@ -207,6 +209,7 @@ Colour hsv(float h, float s, float v)
 {
     float c = s * v;
     h *= 0.954929659f;
+    h = std::log(h)+3.;
     float x = c * (1.f - std::abs(std::fmod(h, 2.f) - 1.f));
     if (h <= 1.f) return Colour(c * 255, x * 255, 0);
     if (h <= 2.f) return Colour(x * 255, c * 255, 0);
@@ -263,11 +266,11 @@ Colour newtonAA(T pWidth, T pHeight, int samples,
 
 struct FractalInfo
 {
-    Complex<double> chaos;
-    double left;
-    double top;
-    double width;
-    double height;
+    Complex<Prec> chaos;
+    Prec left;
+    Prec top;
+    Prec width;
+    Prec height;
     int exponent;
     int samples;
     int maxIterations;
@@ -275,46 +278,46 @@ struct FractalInfo
     int pixelHeight;
     void recalculateWidth()
     {
-        double aspect = static_cast<double>(pixelWidth)
-                        / static_cast<double>(pixelHeight);
+        Prec aspect = static_cast<Prec>(pixelWidth)
+                        / static_cast<Prec>(pixelHeight);
         width = aspect * height;
     }
     void recalculateHeight()
     {
-        double aspect = static_cast<double>(pixelHeight)
-                        / static_cast<double>(pixelWidth);
+        Prec aspect = static_cast<Prec>(pixelHeight)
+                        / static_cast<Prec>(pixelWidth);
         height = aspect * width;
     }
-    double xStep() const
+    Prec xStep() const
     {
-        return width / static_cast<double>(pixelWidth);
+        return width / static_cast<Prec>(pixelWidth);
     }
-    double yStep() const
+    Prec yStep() const
     {
-        return height / static_cast<double>(pixelHeight);
+        return height / static_cast<Prec>(pixelHeight);
     }
 };
 
 void calculateNewtonChunk(int xBegin, int xEnd, int yBegin, int yEnd,
                           FractalInfo info, Image& img,
-                          const std::vector<double>& aaPos,
+                          const std::vector<Prec>& aaPos,
                           int* done, const bool& shouldExit)
 {
-    double xs = info.xStep();
-    double ys = info.yStep();
-    double xb = info.left;
-    double yb = info.top;
+    Prec xs = info.xStep();
+    Prec ys = info.yStep();
+    Prec xb = info.left;
+    Prec yb = info.top;
     size_t it = 0;
     for (int x = xBegin; x < xEnd && !shouldExit; ++x)
     {
         for (int y = yBegin; y < yEnd; ++y)
         {
             ++it;
-            double cx = xs * x + xb;
-            double cy = ys * y + yb;
-            img.setPixel(x, y, newtonAA(xs, ys, info.samples, aaPos, info.chaos,
-                                        cx, cy, info.exponent,
-                                        info.maxIterations, 1e-16));
+            Prec cx = xs * x + xb;
+            Prec cy = ys * y + yb;
+            img.setPixel(x, y, newtonAA<Prec>(xs, ys, info.samples, aaPos,
+                                              info.chaos, cx, cy, info.exponent,
+                                              info.maxIterations, 1e-5));
 
         }
     }
@@ -371,11 +374,11 @@ std::string title(FractalInfo info)
            + " iterations)";
 }
 
-std::vector<double> getAAPos(size_t samples)
+std::vector<Prec> getAAPos(size_t samples)
 {
     std::mt19937 gen;
-    std::uniform_real_distribution<double> dist(-.5, .5);
-    std::vector<double> positions;
+    std::uniform_real_distribution<Prec> dist(-.5, .5);
+    std::vector<Prec> positions;
     for (int i = 0; i < 2 * samples; ++i)
     {
         positions.push_back(dist(gen));
@@ -495,7 +498,7 @@ Image renderPreliminary(FractalInfo info, int rx = 2, int ry = 2)
     return upscaled;
 }
 
-void zoom(FractalInfo& info, Complex<double> center, double amount)
+void zoom(FractalInfo& info, Complex<Prec> center, Prec amount)
 {
     amount = 1. / amount;
     auto newWidth = amount * info.width;
@@ -506,21 +509,21 @@ void zoom(FractalInfo& info, Complex<double> center, double amount)
     info.height = newHeight;
 }
 
-void getDragRectangle(Complex<double> dragBegin, Complex<double> dragEnd,
-                      double& x0, double& x1, double& y0, double& y1)
+void getDragRectangle(Complex<Prec> dragBegin, Complex<Prec> dragEnd,
+                      Prec& x0, Prec& x1, Prec& y0, Prec& y1)
 {
     x0 = dragBegin.real;
     x1 = dragEnd.real;
     y0 = dragBegin.imag;
     y1 = dragEnd.imag;
 
-    double dxMin = std::min(dragBegin.real, dragEnd.real);
-    double dxMax = std::max(dragBegin.real, dragEnd.real);
-    double dyMin = std::min(dragBegin.imag, dragEnd.imag);
-    double dyMax = std::max(dragBegin.imag, dragEnd.imag);
+    Prec dxMin = std::min(dragBegin.real, dragEnd.real);
+    Prec dxMax = std::max(dragBegin.real, dragEnd.real);
+    Prec dyMin = std::min(dragBegin.imag, dragEnd.imag);
+    Prec dyMax = std::max(dragBegin.imag, dragEnd.imag);
 
-    double xLen = dxMax - dxMin;
-    double yLen = dyMax - dyMin;
+    Prec xLen = dxMax - dxMin;
+    Prec yLen = dyMax - dyMin;
 
     bool xReverse = x0 > x1;
     bool yReverse = y0 > y1;
@@ -573,8 +576,8 @@ FractalInfo extractInfo(int argc, char* argv[], bool& saveImage, std::string& de
 {
     saveImage = false;
     FractalInfo info = defaultInfo();
-    double xCenter = 0;
-    double yCenter = 0;
+    Prec xCenter = 0;
+    Prec yCenter = 0;
     info.width = 0;
     info.height = 0;
 
@@ -614,7 +617,7 @@ FractalInfo extractInfo(int argc, char* argv[], bool& saveImage, std::string& de
         }
         else if (arg == "center")
         {
-            double x, y;
+            Prec x, y;
             readFromArgs(x, i, argc, argv);
             readFromArgs(y, i, argc, argv);
         }
@@ -667,7 +670,7 @@ int main(int argc, char* argv[])
     bool needsRender = true;
 
     bool isDragging = false;
-    Complex<double> dragBegin{0., 0.}, dragEnd{0., 0.};
+    Complex<Prec> dragBegin{0., 0.}, dragEnd{0., 0.};
 
     while (wnd.isOpen())
     {
@@ -710,8 +713,8 @@ int main(int argc, char* argv[])
             }
             if (evt.type == sf::Event::MouseButtonPressed)
             {
-                double mx = evt.mouseButton.x / (double)wnd.getSize().x;
-                double my = evt.mouseButton.y / (double)wnd.getSize().y;
+                Prec mx = evt.mouseButton.x / (Prec)wnd.getSize().x;
+                Prec my = evt.mouseButton.y / (Prec)wnd.getSize().y;
                 if (evt.mouseButton.button == sf::Mouse::Left)
                 {
                     isDragging = true;
@@ -732,8 +735,8 @@ int main(int argc, char* argv[])
             if (evt.type == sf::Event::MouseMoved
                 && sf::Mouse::isButtonPressed(sf::Mouse::Left))
             {
-                double mx = evt.mouseMove.x / (double)wnd.getSize().x;
-                double my = evt.mouseMove.y / (double)wnd.getSize().y;
+                Prec mx = evt.mouseMove.x / (Prec)wnd.getSize().x;
+                Prec my = evt.mouseMove.y / (Prec)wnd.getSize().y;
                 dragEnd = {mx, my};
             }
             if (isDragging
@@ -741,10 +744,10 @@ int main(int argc, char* argv[])
                 && evt.mouseButton.button == sf::Mouse::Left)
             {
                 isDragging = false;
-                double mx = evt.mouseButton.x / (double)wnd.getSize().x;
-                double my = evt.mouseButton.y / (double)wnd.getSize().y;
+                Prec mx = evt.mouseButton.x / (Prec)wnd.getSize().x;
+                Prec my = evt.mouseButton.y / (Prec)wnd.getSize().y;
                 dragEnd = {mx, my};
-                double x0, x1, y0, y1;
+                Prec x0, x1, y0, y1;
                 getDragRectangle(dragBegin, dragEnd,
                                  x0, x1, y0, y1);
                 auto newWidth = x1-x0;
@@ -814,8 +817,8 @@ int main(int argc, char* argv[])
         if (isDragging)
         {
             sf::VertexArray rect(sf::LinesStrip, 5);
-            double x0, x1, y0, y1;
-            double aspect = (double)sz.y / sz.x;
+            Prec x0, x1, y0, y1;
+            Prec aspect = (Prec)sz.y / sz.x;
             getDragRectangle(dragBegin, dragEnd,
                              x0, x1, y0, y1);
 
