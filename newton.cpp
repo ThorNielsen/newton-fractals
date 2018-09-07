@@ -208,13 +208,14 @@ Colour hsv(float h, float s, float v)
     float c = s * v;
     h *= 0.954929659f;
     float x = c * (1.f - std::abs(std::fmod(h, 2.f) - 1.f));
-    if (h <= 1.f) return Colour(c * 255, x * 255, 0);
-    if (h <= 2.f) return Colour(x * 255, c * 255, 0);
-    if (h <= 3.f) return Colour(0, c * 255, x * 255);
-    if (h <= 4.f) return Colour(0, x * 255, c * 255);
-    if (h <= 5.f) return Colour(x * 255, 0, c * 255);
-    if (h <= 6.f) return Colour(c * 255, 0, x * 255);
-    return Colour(0, 0, 0);
+    float m = v - c;
+    if (h <= 1.f) return Colour(c * 255 + m, x * 255 + m, m);
+    if (h <= 2.f) return Colour(x * 255 + m, c * 255 + m, m);
+    if (h <= 3.f) return Colour(m, c * 255 + m, x * 255 + m);
+    if (h <= 4.f) return Colour(m, x * 255 + m, c * 255 + m);
+    if (h <= 5.f) return Colour(x * 255 + m, m, c * 255 + m);
+    if (h <= 6.f) return Colour(c * 255 + m, m, x * 255 + m);
+    return Colour(m, m, m);
 }
 
 // x_{n+1} = x_n - f(x_n)/f'(x_n)
@@ -658,6 +659,12 @@ int main(int argc, char* argv[])
         return 0;
     }
 
+    if (!sf::Shader::isAvailable())
+    {
+        std::cerr << "Error: Interactive view requires shader support.\n";
+        return 1;
+    }
+
     sf::RenderWindow wnd(sf::VideoMode(ir.info.pixelWidth, ir.info.pixelHeight),
                          "Newton fractal generator");
     wnd.setVerticalSyncEnabled(true);
@@ -668,6 +675,18 @@ int main(int argc, char* argv[])
 
     bool isDragging = false;
     Complex<double> dragBegin{0., 0.}, dragEnd{0., 0.};
+
+    sf::Shader shader;
+    if (!shader.loadFromFile("shader.vert", sf::Shader::Vertex))
+    {
+        std::cerr << "Couldn't load vertex shader.\n";
+        return 2;
+    }
+    if (!shader.loadFromFile("shader.frag", sf::Shader::Fragment))
+    {
+        std::cerr << "Couldn't load fragment shader.\n";
+        return 3;
+    }
 
     while (wnd.isOpen())
     {
@@ -810,7 +829,7 @@ int main(int argc, char* argv[])
         sf::Sprite sprite;
         sprite.setTexture(texture);
 
-        wnd.draw(sprite);
+        wnd.draw(sprite, &shader);
         if (isDragging)
         {
             sf::VertexArray rect(sf::LinesStrip, 5);
