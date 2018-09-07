@@ -208,6 +208,7 @@ Colour hsv(float h, float s, float v)
     float c = s * v;
     h *= 0.954929659f;
     float x = c * (1.f - std::abs(std::fmod(h, 2.f) - 1.f));
+    if (c > 1) throw new int;
     float m = v - c;
     if (h <= 1.f) return Colour(c * 255 + m, x * 255 + m, m);
     if (h <= 2.f) return Colour(x * 255 + m, c * 255 + m, m);
@@ -677,15 +678,10 @@ int main(int argc, char* argv[])
     Complex<double> dragBegin{0., 0.}, dragEnd{0., 0.};
 
     sf::Shader shader;
-    if (!shader.loadFromFile("shader.vert", sf::Shader::Vertex))
+    if (!shader.loadFromFile("shader.vert", "shader.frag"))
     {
-        std::cerr << "Couldn't load vertex shader.\n";
+        std::cerr << "Couldn't load shader.\n";
         return 2;
-    }
-    if (!shader.loadFromFile("shader.frag", sf::Shader::Fragment))
-    {
-        std::cerr << "Couldn't load fragment shader.\n";
-        return 3;
     }
 
     while (wnd.isOpen())
@@ -828,6 +824,22 @@ int main(int argc, char* argv[])
         texture.update(ir.img.p.data());
         sf::Sprite sprite;
         sprite.setTexture(texture);
+        float left = ir.info.left;
+        float top = ir.info.top;
+        float right = ir.info.left + ir.info.width;
+        float bottom = ir.info.top + ir.info.height;
+        shader.setUniform("uTopLeft", sf::Glsl::Vec2{left, top});
+        shader.setUniform("uBottomRight", sf::Glsl::Vec2{right, bottom});
+        shader.setUniform("uTLPos", sf::Glsl::Vec2{0, 0});
+        shader.setUniform("uBRPos", sf::Glsl::Vec2{ir.img.width,
+                                                   ir.img.height});
+        shader.setUniform("uChaos", sf::Glsl::Vec2{(float)ir.info.chaos.real,
+                                                   (float)ir.info.chaos.imag});
+        shader.setUniform("uExponent", ir.info.exponent);
+        shader.setUniform("uMaxIt", ir.info.maxIterations);
+        shader.setUniform("uMaxDist", 1e-12f);
+        float lerp = sf::Mouse::getPosition(wnd).x / (float)wnd.getSize().x;
+        shader.setUniform("lerp", lerp);
 
         wnd.draw(sprite, &shader);
         if (isDragging)

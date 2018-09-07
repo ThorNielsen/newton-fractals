@@ -1,6 +1,6 @@
 #version 130
 
-#define FLT_MAX 3.402823466e+38
+#define FLT_MAX 10000000000.//3.402823466e+38
 
 uniform sampler2D texture;
 
@@ -23,14 +23,14 @@ vec4 hsv(float h, float s, float v)
 {
     float c = s * v;
     h *= 0.954929659;
-    float x = c * (1.f - abs(mod(h, 2.) - 1.));
+    float x = c * (1. - abs(mod(h, 2.) - 1.));
     vec4 col = vec4(0, 0, 0, 1);
-    if (h <= 1.f) col.rgb = vec3(c, x, 0);
-    else if (h <= 2.f) col.rgb = vec3(x, c, 0);
-    else if (h <= 3.f) col.rgb = vec3(0, c, x);
-    else if (h <= 4.f) col.rgb = vec3(0, x, c);
-    else if (h <= 5.f) col.rgb = vec3(x, 0, c);
-    else if (h <= 6.f) col.rgb = vec3(c, 0, x);
+    if (h <= 1.) col.rgb = vec3(c, x, 0);
+    else if (h <= 2.) col.rgb = vec3(x, c, 0);
+    else if (h <= 3.) col.rgb = vec3(0, c, x);
+    else if (h <= 4.) col.rgb = vec3(0, x, c);
+    else if (h <= 5.) col.rgb = vec3(x, 0, c);
+    else if (h <= 6.) col.rgb = vec3(c, 0, x);
     float m = v - c;
     col.rgb += vec3(m, m, m);
     return col;
@@ -69,7 +69,7 @@ vec2 cdiv(vec2 a, vec2 b)
     return vec2(a.x * b.x + a.y * b.y, a.y * b.x - a.x * b.y) * den;
 }
 
-float atan2(float x, float y)
+float atan2(float y, float x)
 {
     if (x > 0) return atan(y/x);
     if (x < 0)
@@ -112,6 +112,8 @@ vec4 newtonCol(vec2 chaos, vec2 z, int exponent, int maxIt, float maxDist)
     vec3 pack = newton(chaos, z, exponent, maxIt, maxDist);
     z = pack.xy;
     int it = int(pack.z);
+    float arg = carg(z);
+    if (arg > FLT_MAX) return vec4(1, 1, 1, 1);
     return hsv(carg(z)+3.14159265, 1., 1. - 0.05 * (it / maxIt));
 }
 
@@ -120,11 +122,18 @@ vec4 hsv(vec3 _hsv)
     return hsv(_hsv.x, _hsv.y, _hsv.z);
 }
 
+smooth in vec2 fragPos;
+
+uniform vec2 uChaos;
+uniform int uExponent;
+uniform int uMaxIt;
+uniform float uMaxDist;
+
+uniform float lerp;
+
 void main()
 {
-    //vec4 pixel = texture2D(texture, gl_TexCoord[0].xy);
-    vec2 d;
-    d.x = gl_TexCoord[0].x / gl_FragCoord.x;
-    d.y = gl_TexCoord[0].x / (1-gl_FragCoord.x);
-    gl_FragColor = blur(gl_TexCoord[0].xy, d) * 1.0 + 0.0 * hsv(201*0.017453293, 0.76, 0.89); //gl_Color * pixel;
+    vec4 expected = texture2D(texture, gl_TexCoord[0].xy);
+    vec4 calculated = newtonCol(uChaos, fragPos, uExponent, uMaxIt, uMaxDist);
+    gl_FragColor = mix(expected, calculated, clamp(lerp, 0, 1));
 }
