@@ -209,7 +209,9 @@ Colour hsv(float h, float s, float v)
 {
     float c = s * v;
     h *= 0.954929659f;
-    h = std::log(h)+3.;
+    //h = std::log(h)+3.;
+    h = 2*1.3962634015954636 + h/3;
+    // 2.443460952792061
     float x = c * (1.f - std::abs(std::fmod(h, 2.f) - 1.f));
     if (h <= 1.f) return Colour(c * 255, x * 255, 0);
     if (h <= 2.f) return Colour(x * 255, c * 255, 0);
